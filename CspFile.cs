@@ -123,6 +123,24 @@ namespace Unai.Unclip
 			}
 		}
 
+		public struct CspCanvasPreview
+		{
+			public int Id = 0;
+			public int CanvasId = 0;
+			public byte[] ImageData = null;
+			public int ImageWidth = 0;
+			public int ImageHeight = 0;
+
+			public CspCanvasPreview(int id, int canvasId, byte[] imageData, int imageWidth, int imageHeight)
+			{
+				Id = id;
+				CanvasId = canvasId;
+				ImageData = imageData;
+				ImageWidth = imageWidth;
+				ImageHeight = imageHeight;
+			}
+		}
+
 		Stream stream = null;
 		BinaryReader br = null;
 		string streamFilePath = null;
@@ -136,18 +154,15 @@ namespace Unai.Unclip
 		Dictionary<int, CspOffscreen> offscreens = new();
 		Dictionary<int, CspMipmap> mipmaps = new();
 		Dictionary<int, CspMipmapInfo> mipmapInfos = new();
-
-		int canvasWidth = 0;
-		int canvasHeight = 0;
-		byte[] canvasPreviewData;
+		Dictionary<int, CspCanvasPreview> canvasPreviews = new();
 
 		public string FileId => string.IsNullOrEmpty(streamFilePath) ? guid.ToString("N") : Path.GetFileNameWithoutExtension(streamFilePath.Replace(Path.PathSeparator, '_'));
-		public byte[] CanvasPreview => canvasPreviewData;
 		public Dictionary<int, CspLayer> Layers => layers;
 		public Dictionary<int, CspLayerThumbnail> Thumbnails => thumbnails;
 		public Dictionary<int, CspOffscreen> Offscreens => offscreens;
 		public Dictionary<int, CspMipmap> Mipmaps => mipmaps;
 		public Dictionary<int, CspMipmapInfo> MipmapInfos => mipmapInfos;
+		public Dictionary<int, CspCanvasPreview> CanvasPreviews => canvasPreviews;
 
 		public CspFile(Stream cspStream)
 		{
@@ -207,17 +222,20 @@ namespace Unai.Unclip
 					var sqliteCmd = sqliteCon.CreateCommand();
 
 					// TODO: Support for multiple canvas rows (maybe for multipaged documents?).
-					sqliteCmd.CommandText = "select ImageData, ImageWidth, ImageHeight from CanvasPreview;";
+					sqliteCmd.CommandText = "select MainId, CanvasId, ImageData, ImageWidth, ImageHeight from CanvasPreview;";
 
 					using (var reader = sqliteCmd.ExecuteReader())
 					{
 						while (reader.Read())
 						{
-							var imageDataStream = reader.GetStream(0);
-							canvasPreviewData = imageDataStream.ToByteArray();
-							canvasWidth = reader.GetInt32(1);
-							canvasHeight = reader.GetInt32(2);
-							Logger.Log($"  Canvas preview: {canvasPreviewData.Length} bytes, {canvasWidth}×{canvasHeight}.", LogType.Debug);
+							int canvasPreviewId = reader.GetInt32(0);
+							int canvasId = reader.GetInt32(1);
+							var imageData = reader.GetStream(2).ToByteArray();
+							var imageWidth = reader.GetInt32(3);
+							var imageHeight = reader.GetInt32(4);
+
+							Logger.Log($"  Canvas preview: {imageData.Length} bytes, {imageWidth}×{imageHeight}.", LogType.Debug);
+							canvasPreviews.Add(canvasPreviewId, new CspCanvasPreview(canvasPreviewId, canvasId, imageData, imageWidth, imageHeight));
 						}
 					}
 
@@ -313,9 +331,6 @@ namespace Unai.Unclip
 			{
 				Logger.Log($"Cannot parse CSP file SQLite chunk:\n{ex.Message}", LogType.Error);
 			}
-
-			canvasWidth = thumbnails.FirstOrDefault().Value.Width;
-			canvasHeight = thumbnails.FirstOrDefault().Value.Height;
 		}
 
 		public void Dispose()
@@ -477,7 +492,6 @@ namespace Unai.Unclip
 			var mipmap = mipmaps.FirstOrDefault(mm => mm.Key == layer.Value.MipmapId);
 			var mipmapInfo = mipmapInfos.FirstOrDefault(mmi => mmi.Key == mipmap.Value.BaseMipmapInfoId);
 			var offscreen = offscreens.FirstOrDefault(os => os.Key == mipmapInfo.Value.OffscreenId);
-			//var offscreen = offscreens.FirstOrDefault(os => os.Value.CanvasId == canvasId && os.Value.LayerId == layerId);
 			var externalDataId = offscreen.Value.ExternalDataId;
 
 			int pixelSize = 4; // BGR0
@@ -488,9 +502,9 @@ namespace Unai.Unclip
 			int imageWidth = thumbnail.Value.Width;
 			int imageHeight = thumbnail.Value.Height;
 
-			int blocksPerRow = ((canvasWidth + 255) / 256);
+			int blocksPerRow = ((imageWidth + 255) / 256);
 			int paddedWidth = blocksPerRow * 256;
-			int paddedHeight = ((canvasHeight + 255) / 256) * 256;
+			int paddedHeight = ((imageHeight + 255) / 256) * 256;
 
 			Stream externalDataStream = GetLayerExternalData(canvasId, layerId);
 			externalDataStream.Seek(0, SeekOrigin.Begin);
@@ -499,7 +513,7 @@ namespace Unai.Unclip
 			byte[] output = null;
 			PixelFormat outputPixelFormat = PixelFormat.Unknown;
 
-			Logger.Log($"  {canvasWidth}×{canvasHeight} → {paddedWidth}×{paddedHeight} ({paddedWidth * paddedHeight} pixels).", LogType.Debug);
+            Logger.Log($"  {imageWidth}×{imageHeight} → {paddedWidth}×{paddedHeight} ({paddedWidth * paddedHeight} pixels).", LogType.Debug);
 
 			// TODO: Get pixel format from layer struct.
 			if (externalDataArray.Length == (paddedWidth * paddedHeight))

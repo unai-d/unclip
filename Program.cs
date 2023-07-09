@@ -15,11 +15,20 @@ namespace Unai.Unclip
 			Logger.Log("CSP file overview:");
 			foreach (var layer in cspFile.Layers)
 			{
-				Logger.Log($"  Layer #{layer.Key} '{layer.Value.Name}':");
-				Logger.Log($"    Render mipmap ID: {layer.Value.MipmapId}.");
+				Logger.Log($"  Layer #{layer.Key} '{layer.Value.Name}'.");
 			}
 
 			string outputDirectory = Path.GetFullPath(cspFile.FileId);
+			Directory.CreateDirectory(outputDirectory);
+
+			foreach (var canvasPreview in cspFile.CanvasPreviews)
+			{
+				Logger.Log($"Exporting canvas #{canvasPreview.Value.CanvasId}…");
+
+				string canvasPreviewRasterOutputFilePath = $"{outputDirectory}/canvas_{canvasPreview.Value.CanvasId:D4}.png";
+
+				File.WriteAllBytes(canvasPreviewRasterOutputFilePath, canvasPreview.Value.ImageData);
+			}
 
 			foreach (var layer in cspFile.Layers)
 			{
