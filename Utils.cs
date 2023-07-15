@@ -1,3 +1,4 @@
+using System;
 using System.IO;
 using System.Linq;
 
@@ -40,6 +41,21 @@ namespace Unai.Unclip
 		public static string ChangeExtension(this string path, string extension)
 		{
 			return path.Substring(0, path.LastIndexOf(Path.GetExtension(path))) + extension;
+		}
+
+		public static byte[] BgraToRgba(byte[] input)
+		{
+			byte[] ret = new byte[input.Length];
+
+			Array.Copy(input, ret, ret.Length);
+
+			for (int i = 0; i < input.Length; i += 4)
+			{
+				ret[i] = input[i + 2];
+				ret[i + 2] = input[i];
+			}
+
+			return ret;
 		}
 	}
 }

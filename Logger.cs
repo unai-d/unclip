@@ -16,6 +16,9 @@ namespace Unai.Unclip
 	{
 		static ConsoleColor DefaultConsoleForegroundColor = Console.ForegroundColor;
 		public static bool PrintDebugLogs => !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("DEBUG"));
+		public delegate void LogHandler(string text, LogType type);
+		public static event LogHandler OnLog;
+
 		public static void Log(string text, LogType type = LogType.Info)
 		{
 			string ansiEscapeCodeForColor = type switch
@@ -27,7 +30,13 @@ namespace Unai.Unclip
 				LogType.Success => "\x1b[92m",
 				_ => string.Empty
 			};
-			if (type != LogType.Debug) Console.WriteLine(ansiEscapeCodeForColor + text + "\x1b[0m");
+
+			if (type != LogType.Debug || PrintDebugLogs) Console.WriteLine(ansiEscapeCodeForColor + text + "\x1b[0m");
+
+			if (OnLog != null)
+			{
+				OnLog(text, type);
+			}
 		}
 	}
 }

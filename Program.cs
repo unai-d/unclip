@@ -1,15 +1,30 @@
 ﻿using System;
-using System.Drawing;
-using System.Drawing.Imaging;
 using System.IO;
-using System.Linq;
+using Gtk;
 
 namespace Unai.Unclip
 {
 	class Program
 	{
+		[STAThread]
 		public static void Main(string[] args)
 		{
+			if (args.Length == 0)
+			{
+				Application.Init();
+
+				var app = new Application("io.github.unai-d.unclip", GLib.ApplicationFlags.None);
+				app.Register(GLib.Cancellable.Current);
+
+				var mainWindow = new GtkMainWindow();
+				app.AddWindow(mainWindow);
+
+				mainWindow.Show();
+				Application.Run();
+
+				return;
+			}
+				
 			CspFile cspFile = new CspFile(args[0]);
 
 			Logger.Log("CSP file overview:");

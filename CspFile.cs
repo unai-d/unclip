@@ -1,6 +1,6 @@
 using System.IO;
 using System.Text;
-using Microsoft.Data.Sqlite;
+using System.Data.SQLite;
 using System.IO.Compression;
 using System;
 using System.Linq;
@@ -202,134 +202,126 @@ namespace Unai.Unclip
 			CspChunk sqliteChunk = chunks.FirstOrDefault(c => c.Type == "CHNKSQLi");
 			if (sqliteChunk.Type != "CHNKSQLi")
 			{
-				Logger.Log($"Cannot find SQLite chunk.", LogType.Error);
-				return;
+				throw new InvalidDataException($"Cannot find SQLite chunk.");
 			}
 
-			try
+			stream.Seek(sqliteChunk.Position.Item1 + 16, SeekOrigin.Begin);
+
+			string sqliteChunkFile = Path.Combine(Path.GetTempPath(), $"{FileId}.sqlite3");
+			Logger.Log($"Saving CSP file SQLite chunk to file '{sqliteChunkFile}'.", LogType.Debug);
+			byte[] sqliteData = br.ReadBytes((int)sqliteChunk.Size);
+			File.WriteAllBytes(sqliteChunkFile, sqliteData);
+
+			Logger.Log("Reading CSP file metadata from SQLite chunk…");
+			using (var sqliteCon = new SQLiteConnection($"Data Source={sqliteChunkFile}"))
 			{
-				stream.Seek(sqliteChunk.Position.Item1 + 16, SeekOrigin.Begin);
+				sqliteCon.Open();
 
-				string sqliteChunkFile = Path.Combine(Path.GetTempPath(), $"{FileId}.sqlite3");
-				Logger.Log($"Saving CSP file SQLite chunk to file '{sqliteChunkFile}'.", LogType.Debug);
-				byte[] sqliteData = br.ReadBytes((int)sqliteChunk.Size);
-				File.WriteAllBytes(sqliteChunkFile, sqliteData);
+				var sqliteCmd = sqliteCon.CreateCommand();
 
-				using (var sqliteCon = new SqliteConnection($"Data Source={sqliteChunkFile}"))
+				sqliteCmd.CommandText = "select MainId, CanvasId, ImageData, ImageWidth, ImageHeight from CanvasPreview;";
+
+				using (var reader = sqliteCmd.ExecuteReader())
 				{
-					sqliteCon.Open();
-
-					var sqliteCmd = sqliteCon.CreateCommand();
-
-					// TODO: Support for multiple canvas rows (maybe for multipaged documents?).
-					sqliteCmd.CommandText = "select MainId, CanvasId, ImageData, ImageWidth, ImageHeight from CanvasPreview;";
-
-					using (var reader = sqliteCmd.ExecuteReader())
+					while (reader.Read())
 					{
-						while (reader.Read())
-						{
-							int canvasPreviewId = reader.GetInt32(0);
-							int canvasId = reader.GetInt32(1);
-							var imageData = reader.GetStream(2).ToByteArray();
-							var imageWidth = reader.GetInt32(3);
-							var imageHeight = reader.GetInt32(4);
+						int canvasPreviewId = reader.GetInt32(0);
+						int canvasId = reader.GetInt32(1);
+						var imageData = reader.GetStream(2).ToByteArray();
+						var imageWidth = reader.GetInt32(3);
+						var imageHeight = reader.GetInt32(4);
 
-							Logger.Log($"  Canvas preview: {imageData.Length} bytes, {imageWidth}×{imageHeight}.", LogType.Debug);
-							canvasPreviews.Add(canvasPreviewId, new CspCanvasPreview(canvasPreviewId, canvasId, imageData, imageWidth, imageHeight));
-						}
+						Logger.Log($"  Canvas preview: {imageData.Length} bytes, {imageWidth}×{imageHeight}.", LogType.Debug);
+						canvasPreviews.Add(canvasPreviewId, new CspCanvasPreview(canvasPreviewId, canvasId, imageData, imageWidth, imageHeight));
 					}
-
-					sqliteCmd.CommandText = "select MainId, CanvasId, LayerName, LayerUuid, LayerRenderMipmap, LayerRenderThumbnail from Layer;";
-
-					using (var reader = sqliteCmd.ExecuteReader())
-					{
-						while (reader.Read())
-						{
-							int layerId = reader.GetInt32(0);
-							int canvasId = reader.GetInt32(1);
-							string layerName = reader.GetString(2);
-							string layerUuid = reader.GetString(3);
-							int layerRenderMipmap = reader.GetInt32(4);
-							int layerRenderThumbnail = reader.GetInt32(5);
-
-							Logger.Log($"  Layer #{layerId}: canvas #{canvasId}, mipmap #{layerRenderMipmap}, thumbnail #{layerRenderThumbnail}, '{layerName}'.", LogType.Debug);
-							layers.Add(layerId, new CspLayer(layerId, canvasId, layerName, layerRenderMipmap, layerRenderThumbnail));
-						}
-					}
-
-					sqliteCmd.CommandText = "select MainId, CanvasId, LayerId, ThumbnailCanvasWidth, ThumbnailCanvasHeight, ThumbnailOffscreen from LayerThumbnail;";
-
-					using (var reader = sqliteCmd.ExecuteReader())
-					{
-						while (reader.Read())
-						{
-							int layerThumbnailId = reader.GetInt32(0);
-							int canvasId = reader.GetInt32(1);
-							int layerId = reader.GetInt32(2);
-							int thumbnailWidth = reader.GetInt32(3);
-							int thumbnailHeight = reader.GetInt32(4);
-							int offscreenId = reader.GetInt32(5);
-
-							Logger.Log($"  Layer thumbnail #{layerThumbnailId}: canvas #{canvasId}, layer #{layerId}, offscreen #{offscreenId}, {thumbnailWidth}×{thumbnailHeight}.", LogType.Debug);
-							thumbnails.Add(layerThumbnailId, new CspLayerThumbnail(layerThumbnailId, canvasId, layerId, thumbnailWidth, thumbnailHeight, offscreenId));
-						}
-					}
-
-					sqliteCmd.CommandText = "select MainId, CanvasId, LayerId, BlockData from Offscreen;";
-
-					using (var reader = sqliteCmd.ExecuteReader())
-					{
-						while (reader.Read())
-						{
-							int offscreenId = reader.GetInt32(0);
-							int canvasId = reader.GetInt32(1);
-							int layerId = reader.GetInt32(2);
-							string externalDataId = reader.GetString(3);
-
-							Logger.Log($"  Offscreen #{offscreenId}: canvas #{canvasId}, layer #{layerId}, '{externalDataId}'.", LogType.Debug);
-							offscreens.Add(offscreenId, new CspOffscreen(offscreenId, canvasId, layerId, externalDataId));
-						}
-					}
-
-					sqliteCmd.CommandText = "select MainId, CanvasId, LayerId, MipmapCount, BaseMipmapInfo from Mipmap;";
-
-					using (var reader = sqliteCmd.ExecuteReader())
-					{
-						while (reader.Read())
-						{
-							int mipmapId = reader.GetInt32(0);
-							int canvasId = reader.GetInt32(1);
-							int layerId = reader.GetInt32(2);
-							int mipmapCount = reader.GetInt32(3);
-							int baseMipmapInfoId = reader.GetInt32(4);
-
-							mipmaps[mipmapId] = new CspMipmap(mipmapId, canvasId, layerId, mipmapCount, baseMipmapInfoId);
-						}
-					}
-
-					sqliteCmd.CommandText = "select MainId, CanvasId, LayerId, ThisScale, Offscreen, NextIndex from MipmapInfo;";
-
-					using (var reader = sqliteCmd.ExecuteReader())
-					{
-						while (reader.Read())
-						{
-							int mipmapInfoId = reader.GetInt32(0);
-							int canvasId = reader.GetInt32(1);
-							int layerId = reader.GetInt32(2);
-							double scale = reader.GetDouble(3);
-							int offscreenId = reader.GetInt32(4);
-							int nextId = reader.GetInt32(5);
-
-							mipmapInfos[mipmapInfoId] = new CspMipmapInfo(mipmapInfoId, canvasId, layerId, scale, offscreenId, nextId);
-						}
-					}
-
-					sqliteCon.Close();
 				}
-			}
-			catch (Exception ex)
-			{
-				Logger.Log($"Cannot parse CSP file SQLite chunk:\n{ex.Message}", LogType.Error);
+
+				sqliteCmd.CommandText = "select MainId, CanvasId, LayerName, LayerUuid, LayerRenderMipmap, LayerRenderThumbnail from Layer;";
+
+				using (var reader = sqliteCmd.ExecuteReader())
+				{
+					while (reader.Read())
+					{
+						int layerId = reader.GetInt32(0);
+						int canvasId = reader.GetInt32(1);
+						string layerName = reader.GetString(2);
+						string layerUuid = reader.GetString(3);
+						int layerRenderMipmap = reader.GetInt32(4);
+						int layerRenderThumbnail = reader.GetInt32(5);
+
+						Logger.Log($"  Layer #{layerId}: canvas #{canvasId}, mipmap #{layerRenderMipmap}, thumbnail #{layerRenderThumbnail}, '{layerName}'.", LogType.Debug);
+						layers.Add(layerId, new CspLayer(layerId, canvasId, layerName, layerRenderMipmap, layerRenderThumbnail));
+					}
+				}
+
+				sqliteCmd.CommandText = "select MainId, CanvasId, LayerId, ThumbnailCanvasWidth, ThumbnailCanvasHeight, ThumbnailOffscreen from LayerThumbnail;";
+
+				using (var reader = sqliteCmd.ExecuteReader())
+				{
+					while (reader.Read())
+					{
+						int layerThumbnailId = reader.GetInt32(0);
+						int canvasId = reader.GetInt32(1);
+						int layerId = reader.GetInt32(2);
+						int thumbnailWidth = reader.GetInt32(3);
+						int thumbnailHeight = reader.GetInt32(4);
+						int offscreenId = reader.GetInt32(5);
+
+						Logger.Log($"  Layer thumbnail #{layerThumbnailId}: canvas #{canvasId}, layer #{layerId}, offscreen #{offscreenId}, {thumbnailWidth}×{thumbnailHeight}.", LogType.Debug);
+						thumbnails.Add(layerThumbnailId, new CspLayerThumbnail(layerThumbnailId, canvasId, layerId, thumbnailWidth, thumbnailHeight, offscreenId));
+					}
+				}
+
+				sqliteCmd.CommandText = "select MainId, CanvasId, LayerId, BlockData from Offscreen;";
+
+				using (var reader = sqliteCmd.ExecuteReader())
+				{
+					while (reader.Read())
+					{
+						int offscreenId = reader.GetInt32(0);
+						int canvasId = reader.GetInt32(1);
+						int layerId = reader.GetInt32(2);
+						string externalDataId = reader.GetString(3);
+
+						Logger.Log($"  Offscreen #{offscreenId}: canvas #{canvasId}, layer #{layerId}, '{externalDataId}'.", LogType.Debug);
+						offscreens.Add(offscreenId, new CspOffscreen(offscreenId, canvasId, layerId, externalDataId));
+					}
+				}
+
+				sqliteCmd.CommandText = "select MainId, CanvasId, LayerId, MipmapCount, BaseMipmapInfo from Mipmap;";
+
+				using (var reader = sqliteCmd.ExecuteReader())
+				{
+					while (reader.Read())
+					{
+						int mipmapId = reader.GetInt32(0);
+						int canvasId = reader.GetInt32(1);
+						int layerId = reader.GetInt32(2);
+						int mipmapCount = reader.GetInt32(3);
+						int baseMipmapInfoId = reader.GetInt32(4);
+
+						mipmaps[mipmapId] = new CspMipmap(mipmapId, canvasId, layerId, mipmapCount, baseMipmapInfoId);
+					}
+				}
+
+				sqliteCmd.CommandText = "select MainId, CanvasId, LayerId, ThisScale, Offscreen, NextIndex from MipmapInfo;";
+
+				using (var reader = sqliteCmd.ExecuteReader())
+				{
+					while (reader.Read())
+					{
+						int mipmapInfoId = reader.GetInt32(0);
+						int canvasId = reader.GetInt32(1);
+						int layerId = reader.GetInt32(2);
+						double scale = reader.GetDouble(3);
+						int offscreenId = reader.GetInt32(4);
+						int nextId = reader.GetInt32(5);
+
+						mipmapInfos[mipmapInfoId] = new CspMipmapInfo(mipmapInfoId, canvasId, layerId, scale, offscreenId, nextId);
+					}
+				}
+
+				sqliteCon.Close();
 			}
 		}
 
@@ -415,7 +407,7 @@ namespace Unai.Unclip
 				long blockDataStartPos = stream.Position;
 				blockEndPos = blockDataStartPos + blockDataLen;
 
-				Logger.Log($"  Block at 0x{blockStartPos:X8}: A={aSize:X8} B={bSize:X8} '{blockName}', {blockDataLen} bytes.", LogType.Debug);
+				Logger.Log($"  Data block at 0x{blockStartPos:X8}: A={aSize:X8} B={bSize:X8} '{blockName}', {blockDataLen} bytes.", LogType.Debug);
 
 				switch (blockName)
 				{
@@ -487,6 +479,8 @@ namespace Unai.Unclip
 
 		public Bitmap GetLayerRasterData(int canvasId, int layerId)
 		{
+			Logger.Log($"Loading pixel data from layer #{layerId} at canvas #{canvasId}…");
+
 			var layer = layers.FirstOrDefault(l => l.Key == layerId && l.Value.CanvasId == canvasId);
 			var thumbnail = thumbnails.FirstOrDefault(tn => tn.Key == layer.Value.ThumbnailId);
 			var mipmap = mipmaps.FirstOrDefault(mm => mm.Key == layer.Value.MipmapId);
@@ -513,12 +507,12 @@ namespace Unai.Unclip
 			byte[] output = null;
 			PixelFormat outputPixelFormat = PixelFormat.Unknown;
 
-            Logger.Log($"  {imageWidth}×{imageHeight} → {paddedWidth}×{paddedHeight} ({paddedWidth * paddedHeight} pixels).", LogType.Debug);
+            Logger.Log($"  Image is {imageWidth}×{imageHeight}, padded is {paddedWidth}×{paddedHeight} ({paddedWidth * paddedHeight} total pixels).", LogType.Debug);
 
 			// TODO: Get pixel format from layer struct.
 			if (externalDataArray.Length == (paddedWidth * paddedHeight))
 			{
-				Logger.Log($"  Format: 100% scale grayscale.", LogType.Debug);
+				Logger.Log($"  Guessed format: 100% scale grayscale.", LogType.Debug);
 
 				int blockCount = (int)externalDataArray.Length / blockSize;
 
@@ -547,7 +541,7 @@ namespace Unai.Unclip
 			}
 			else if (externalDataArray.Length == (paddedWidth * paddedHeight * pixelSize) + (paddedWidth * paddedHeight))
 			{
-				Logger.Log($"  Format: 100% scale alpha+BGR0.", LogType.Debug);
+				Logger.Log($"  Guessed format: 100% scale alpha+BGR0.", LogType.Debug);
 
 				output = new byte[paddedWidth * paddedHeight * pixelSize];
 				outputPixelFormat = PixelFormat.B8G8R8A8;
@@ -609,6 +603,10 @@ namespace Unai.Unclip
 							Logger.Log($"OOB Blk{blockIdx},{blockY},{blockX} BGR0 Row{blockRow},Col{blockColumn} → {targetPtr}/{output.Length}", LogType.Error);
 					}
 				}
+			}
+			else
+			{
+				throw new InvalidDataException($"Cannot guess pixel format of external data '{externalDataId}'.\nSize is {externalDataArray.Length} bytes.");
 			}
 
 			return output != null ? new Bitmap(output, (uint)imageWidth, (uint)imageHeight, (uint)paddedWidth, (uint)paddedHeight, outputPixelFormat) : null;

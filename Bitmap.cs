@@ -25,6 +25,8 @@ namespace Unai.Unclip
 		public byte[] Pixels => pixels;
 		public uint Width => width;
 		public uint Height => height;
+		public uint InternalWidth => internalWidth;
+		public uint InternalHeight => internalHeight;
 
 		public Bitmap(byte[] pixels, uint width, uint height, uint internalWidth, uint internalHeight, PixelFormat pixelFormat)
 		{
@@ -36,7 +38,7 @@ namespace Unai.Unclip
 			this.pixelFormat = pixelFormat;
 		}
 
-		public void SaveToFile(string path)
+		private Image GetImage()
 		{
 			Image img = null;
 			switch (pixelFormat)
@@ -51,7 +53,17 @@ namespace Unai.Unclip
 					throw new Exception($"Unsupported pixel format: `{pixelFormat}`.");
 			}
 			img.Mutate(i => i.Crop(new Rectangle(0, 0, (int)width, (int)height)));
-			img.Save(path);
+			return img;
+		}
+
+		public void SaveToStream(Stream stream)
+		{
+			GetImage().SaveAsPng(stream);
+		}
+
+		public void SaveToFile(string path)
+		{
+			GetImage().Save(path);
 		}
 	}
 }
