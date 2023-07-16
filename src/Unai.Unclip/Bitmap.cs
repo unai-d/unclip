@@ -58,12 +58,14 @@ namespace Unai.Unclip
 
 		public void SaveToStream(Stream stream)
 		{
-			GetImage().SaveAsPng(stream);
+			using Image img = GetImage();
+			img.SaveAsPng(stream);
 		}
 
 		public void SaveToFile(string path)
 		{
-			GetImage().Save(path);
+			using Image img = GetImage();
+			img.Save(path);
 		}
 	}
 }

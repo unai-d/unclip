@@ -335,7 +335,10 @@ namespace Unai.Unclip
 			var offscreen = offscreens.FirstOrDefault(os => os.Value.CanvasId == canvasId && os.Value.LayerId == layerId);
 			var externalDataId = offscreen.Value.ExternalDataId;
 
-			if (string.IsNullOrEmpty(externalDataId)) return null;
+			if (string.IsNullOrEmpty(externalDataId))
+			{
+				throw new InvalidDataException($"Layer {layerId} of canvas {canvasId} has no associated external data chunk.");
+			}
 
 			if (!externalData.ContainsKey(externalDataId))
 			{
@@ -364,9 +367,11 @@ namespace Unai.Unclip
 			stream.Seek(chunk.Position.Item1 + 16, SeekOrigin.Begin);
 
 			long externalDataIdLen = br.ReadInt64BE();
-			string externalDataId = Encoding.UTF8.GetString(br.ReadBytes(40)); //(int)externalDataIdLen));
+			externalDataIdLen = Math.Clamp(externalDataIdLen, 0, 40);
+			string externalDataId = Encoding.UTF8.GetString(br.ReadBytes((int)externalDataIdLen));
 			long externalDataSize = br.ReadInt64BE();
-			Logger.Log($"CSP file external data: '{externalDataId}', {externalDataSize} bytes.", LogType.Debug);
+			Logger.Log($"Reading external data chunk '{externalDataId}'…");
+			Logger.Log($"  {externalDataSize} bytes.", LogType.Debug);
 
 			MemoryStream externalDataMs = new MemoryStream();
 			externalDataMs.SetLength((int)externalDataSize);
@@ -488,16 +493,17 @@ namespace Unai.Unclip
 			var externalDataId = offscreen.Value.ExternalDataId;
 
 			int pixelSize = 4; // BGR0
-			int bgraRowSize = (256 * pixelSize);
-			int bgrCompositeBlockSize = (256 * 320 * pixelSize); // 0x050000 (327680).
+			int bgrRowSize = 256 * pixelSize;
+			int bgrCompositeBlockSize = 256 * 320 * pixelSize; // 0x050000 (327680)
 			int blockSize = 256 * 256; // 64 KiB
 
 			int imageWidth = thumbnail.Value.Width;
 			int imageHeight = thumbnail.Value.Height;
 
 			int blocksPerRow = ((imageWidth + 255) / 256);
+			int blocksPerColumn = ((imageHeight + 255) / 256);
 			int paddedWidth = blocksPerRow * 256;
-			int paddedHeight = ((imageHeight + 255) / 256) * 256;
+			int paddedHeight = blocksPerColumn * 256;
 
 			Stream externalDataStream = GetLayerExternalData(canvasId, layerId);
 			externalDataStream.Seek(0, SeekOrigin.Begin);
@@ -508,8 +514,55 @@ namespace Unai.Unclip
 
             Logger.Log($"  Image is {imageWidth}×{imageHeight}, padded is {paddedWidth}×{paddedHeight} ({paddedWidth * paddedHeight} total pixels).", LogType.Debug);
 
+			bool grayscaleMode = false;
+			
 			// TODO: Get pixel format from layer struct.
-			if (externalDataArray.Length == (paddedWidth * paddedHeight))
+			int grayscaleExpectedSize = paddedWidth * paddedHeight;
+			int bgrExpectedSize = paddedWidth * paddedHeight * (pixelSize + 1);
+
+			if (externalDataArray.Length == grayscaleExpectedSize)
+			{
+				grayscaleMode = true;
+			}
+			else if (externalDataArray.Length != bgrExpectedSize)
+			{
+				Logger.Log($"  Cannot infer external data chunk pixel format from byte count.", LogType.Warning);
+
+				bool guessed = false;
+
+				for (int y = blocksPerColumn; y < blocksPerColumn * 3; y++)
+				{
+					for (int x = blocksPerRow; x < blocksPerRow * 3; x++)
+					{
+						int guessedWidth = x * 256;
+						int guessedHeight = y * 256;
+
+						// TODO: Add grayscale support.
+						if (externalDataArray.Length == guessedWidth * guessedHeight * (pixelSize + 1))
+						{
+							int paddedWidthDiff = (paddedWidth - imageWidth);
+							int paddedHeightDiff = (paddedHeight - imageHeight);
+							paddedWidth = guessedWidth;
+							paddedHeight = guessedHeight;
+							imageWidth = paddedWidth - paddedWidthDiff;
+							imageHeight = paddedHeight - paddedHeightDiff;
+							blocksPerRow = x;
+							Logger.Log($"  Guessed resolution: {imageWidth}×{imageHeight}, padded {paddedWidth}×{paddedHeight}.", LogType.Debug);
+							guessed = true;
+							break;
+						}
+					}
+
+					if (guessed) break;
+				}
+
+				if (!guessed)
+				{
+					Logger.Log("  Cannot infer external data chunk pixel format from block count.", LogType.Error);
+				}
+			}
+
+			if (grayscaleMode)
 			{
 				Logger.Log($"  Guessed format: 100% scale grayscale.", LogType.Debug);
 
@@ -538,7 +591,7 @@ namespace Unai.Unclip
 					}
 				}
 			}
-			else if (externalDataArray.Length == (paddedWidth * paddedHeight * pixelSize) + (paddedWidth * paddedHeight))
+			else
 			{
 				Logger.Log($"  Guessed format: 100% scale alpha+BGR0.", LogType.Debug);
 
@@ -570,14 +623,19 @@ namespace Unai.Unclip
 
 						int targetPtr =
 							(blockY * blockSize * blocksPerRow * pixelSize) +
-							(blockX * 256 * pixelSize) +
+							(blockX * bgrRowSize) +
 							(alphaBlockRow * 256 * blocksPerRow * pixelSize) +
 							(alphaBlockColumn * pixelSize) + (pixelSize - 1);
 						
 						if (targetPtr >= 0 && targetPtr < output.Length)
+						{
 							output[targetPtr] = alphaBlock[i];
+						}
 						else
-							Logger.Log($"OOB Blk{blockIdx},{blockY},{blockX} Alpha Row{alphaBlockRow},Col{alphaBlockColumn} → {targetPtr}/{output.Length}", LogType.Error);
+						{
+							Logger.Log($"OOB Blk{blockIdx}(Y{blockY},X{blockX}) Alpha Row{alphaBlockRow},Col{alphaBlockColumn} → {targetPtr}/{output.Length}", LogType.Error);
+							break;
+						}
 					}
 
 					for (int i = 0; i < bgrBlock.Length; i++)
@@ -592,20 +650,21 @@ namespace Unai.Unclip
 
 						int targetPtr =
 							(blockY * blockSize * blocksPerRow * pixelSize) +
-							(blockX * 256 * pixelSize) +
+							(blockX * bgrRowSize) +
 							(blockRow * 256 * blocksPerRow * pixelSize) +
 							(blockColumn * pixelSize) + componentIndex;
 
 						if (targetPtr >= 0 && targetPtr < output.Length)
+						{
 							output[targetPtr] = bgrBlock[i];
+						}
 						else
-							Logger.Log($"OOB Blk{blockIdx},{blockY},{blockX} BGR0 Row{blockRow},Col{blockColumn} → {targetPtr}/{output.Length}", LogType.Error);
+						{
+							Logger.Log($"OOB Blk{blockIdx}(Y{blockY},X{blockX}) BGR0 Row{blockRow},Col{blockColumn} → {targetPtr}/{output.Length}", LogType.Error);
+							break;
+						}
 					}
 				}
-			}
-			else
-			{
-				throw new InvalidDataException($"Cannot guess pixel format of external data '{externalDataId}'.\nSize is {externalDataArray.Length} bytes.");
 			}
 
 			return output != null ? new Bitmap(output, (uint)imageWidth, (uint)imageHeight, (uint)paddedWidth, (uint)paddedHeight, outputPixelFormat) : null;

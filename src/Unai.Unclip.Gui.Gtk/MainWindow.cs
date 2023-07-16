@@ -12,11 +12,9 @@ namespace Unai.Unclip
 	{
 		[Object] private FileChooserButton uiInputFileChooser;
 		[Object] private FileChooserButton uiOutputDirectoryFileChooser;
-		[Object] private Button uiStartButton;
 		[Object] private TreeView uiLayers;
 		[Object] private Image uiLayerPreview;
 		[Object] private TextView uiLogOutput;
-		[Object] private ScrolledWindow uiLogOutputScroll;
 
 		TextMark logOutputEnd;
 		TreeStore layerTree = new(typeof(string));
@@ -46,9 +44,9 @@ namespace Unai.Unclip
 					// Scroll does not work properly without this.
 					if (Environment.OSVersion.Platform != PlatformID.Win32NT) // This throws a StackOverflowException on Windows.
 					{
-						while (Gtk.Application.EventsPending())
+						while (Application.EventsPending())
 						{
-							Gtk.Application.RunIteration();
+							Application.RunIteration();
 						}
 					}
 					
@@ -72,7 +70,8 @@ namespace Unai.Unclip
 
 		private void Window_DeleteEvent(object sender, DeleteEventArgs a)
 		{
-			Gtk.Application.Quit();
+			Hide();
+			Application.Quit();
 		}
 
 		private void UpdateOutputDirectory(object sender, EventArgs e)
@@ -100,8 +99,18 @@ namespace Unai.Unclip
 				errorDialog.Show();
 			}
 
-			cachedLayerPixelData.Clear();
+			ClearCache();
 			UpdateLayerTreeView();
+		}
+
+		private void ClearCache()
+		{
+			Logger.Log($"Clearing cache…");
+			foreach (var pixbuf in cachedLayerPixelData)
+			{
+				pixbuf.Value.Dispose();
+			}
+			cachedLayerPixelData.Clear();
 		}
 
 		private void UpdateLayerTreeView()
@@ -148,6 +157,7 @@ namespace Unai.Unclip
 				return;
 			}
 
+			ClearCache();
 			Task.Run(ConversionThread);
 		}
 
@@ -155,16 +165,16 @@ namespace Unai.Unclip
 		{
 			ProgressBar pb = new ProgressBar();
 
-			Gtk.MessageDialog infoDialog = new MessageDialog(this, DialogFlags.Modal, MessageType.Info, ButtonsType.None, false, null);
-			infoDialog.Text = "Hold on…";
-			infoDialog.ContentArea.PackStart(pb, true, true, 0);
-			infoDialog.ShowAll();
-			infoDialog.Show();
+			Gtk.MessageDialog progressDialog = new MessageDialog(this, DialogFlags.Modal, MessageType.Info, ButtonsType.None, false, null);
+			progressDialog.Text = "Hold on…";
+			progressDialog.ContentArea.PackStart(pb, true, true, 0);
+			progressDialog.ShowAll();
+			progressDialog.Show();
 
 			var logAndShow = (string text, LogType type) =>
 			{
 				Logger.Log(text, type);
-				infoDialog.Text = text;
+				progressDialog.Text = text;
 			};
 
 			string outputDirectory = System.IO.Path.Combine(System.IO.Path.GetFullPath(uiOutputDirectoryFileChooser.File.Path), cspFile.FileId);
@@ -207,7 +217,7 @@ namespace Unai.Unclip
 				progress++;
 			}
 
-			infoDialog.Hide();
+			progressDialog.Hide();
 		}
 
 		private void UpdateLayerPreview(object sender, RowActivatedArgs e)
