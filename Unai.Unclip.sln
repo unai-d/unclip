@@ -1,0 +1,34 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{44F45A9F-214D-4E83-B998-2CA9EAAF9401}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Unai.Unclip", "src\Unai.Unclip\Unai.Unclip.csproj", "{45F2960B-54A4-49BE-8126-133B03D3F251}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Unai.Unclip.Gui.Gtk", "src\Unai.Unclip.Gui.Gtk\Unai.Unclip.Gui.Gtk.csproj", "{EFE264A0-46DF-498A-9A6B-8C011D1B1888}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{45F2960B-54A4-49BE-8126-133B03D3F251}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{45F2960B-54A4-49BE-8126-133B03D3F251}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{45F2960B-54A4-49BE-8126-133B03D3F251}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{45F2960B-54A4-49BE-8126-133B03D3F251}.Release|Any CPU.Build.0 = Release|Any CPU
+		{EFE264A0-46DF-498A-9A6B-8C011D1B1888}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{EFE264A0-46DF-498A-9A6B-8C011D1B1888}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{EFE264A0-46DF-498A-9A6B-8C011D1B1888}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{EFE264A0-46DF-498A-9A6B-8C011D1B1888}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{45F2960B-54A4-49BE-8126-133B03D3F251} = {44F45A9F-214D-4E83-B998-2CA9EAAF9401}
+		{EFE264A0-46DF-498A-9A6B-8C011D1B1888} = {44F45A9F-214D-4E83-B998-2CA9EAAF9401}
+	EndGlobalSection
+EndGlobal

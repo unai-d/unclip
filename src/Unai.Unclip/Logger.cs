@@ -21,14 +21,13 @@ namespace Unai.Unclip
 
 		public static void Log(string text, LogType type = LogType.Info)
 		{
-			string ansiEscapeCodeForColor = type switch
+			string ansiEscapeCodeForColor = string.Empty;
+			switch (type)
 			{
-				LogType.Info => string.Empty,
-				LogType.Warning => "\x1b[93m",
-				LogType.Error => "\x1b[91m",
-				LogType.Debug => "\x1b[96m",
-				LogType.Success => "\x1b[92m",
-				_ => string.Empty
+				case LogType.Warning: ansiEscapeCodeForColor = "\x1b[93m"; break;
+				case LogType.Error: ansiEscapeCodeForColor = "\x1b[91m"; break;
+				case LogType.Debug: ansiEscapeCodeForColor = "\x1b[96m"; break;
+				case LogType.Success: ansiEscapeCodeForColor = "\x1b[92m"; break;
 			};
 
 			if (type != LogType.Debug || PrintDebugLogs) Console.WriteLine(ansiEscapeCodeForColor + text + "\x1b[0m");

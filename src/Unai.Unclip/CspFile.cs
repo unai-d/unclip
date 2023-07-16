@@ -5,7 +5,6 @@ using System.IO.Compression;
 using System;
 using System.Linq;
 using System.Collections.Generic;
-using System.Diagnostics;
 
 namespace Unai.Unclip
 {
@@ -146,15 +145,15 @@ namespace Unai.Unclip
 		string streamFilePath = null;
 		Guid guid = Guid.NewGuid();
 
-		List<CspChunk> chunks = new();
-		Dictionary<string, Stream> externalData = new();
+		List<CspChunk> chunks = new List<CspChunk>();
+		Dictionary<string, Stream> externalData = new Dictionary<string, Stream>();
 
-		Dictionary<int, CspLayer> layers = new();
-		Dictionary<int, CspLayerThumbnail> thumbnails = new();
-		Dictionary<int, CspOffscreen> offscreens = new();
-		Dictionary<int, CspMipmap> mipmaps = new();
-		Dictionary<int, CspMipmapInfo> mipmapInfos = new();
-		Dictionary<int, CspCanvasPreview> canvasPreviews = new();
+		Dictionary<int, CspLayer> layers = new Dictionary<int, CspLayer>();
+		Dictionary<int, CspLayerThumbnail> thumbnails = new Dictionary<int, CspLayerThumbnail>();
+		Dictionary<int, CspOffscreen> offscreens = new Dictionary<int, CspOffscreen>();
+		Dictionary<int, CspMipmap> mipmaps = new Dictionary<int, CspMipmap>();
+		Dictionary<int, CspMipmapInfo> mipmapInfos = new Dictionary<int, CspMipmapInfo>();
+		Dictionary<int, CspCanvasPreview> canvasPreviews = new Dictionary<int, CspCanvasPreview>();
 
 		public string FileId => string.IsNullOrEmpty(streamFilePath) ? guid.ToString("N") : Path.GetFileNameWithoutExtension(streamFilePath.Replace(Path.PathSeparator, '_'));
 		public Dictionary<int, CspLayer> Layers => layers;

@@ -8,7 +8,7 @@ using static Gtk.Builder;
 
 namespace Unai.Unclip
 {
-	class GtkMainWindow : Window
+	class MainWindow : Window
 	{
 		[Object] private FileChooserButton uiInputFileChooser;
 		[Object] private FileChooserButton uiOutputDirectoryFileChooser;
@@ -25,12 +25,12 @@ namespace Unai.Unclip
 
 		CspFile cspFile = null;
 
-		public GtkMainWindow() : this(new Builder("MainWindow.glade"))
+		public MainWindow() : this(new Builder("MainWindow.glade"))
 		{
 
 		}
 
-		private GtkMainWindow(Builder builder) : base(builder.GetRawOwnedObject("MainWindow"))
+		private MainWindow(Builder builder) : base(builder.GetRawOwnedObject("MainWindow"))
 		{
 			builder.Autoconnect(this);
 
@@ -44,9 +44,12 @@ namespace Unai.Unclip
 					uiLogOutput.Buffer.Insert(ref endIter, text + "\n");
 
 					// Scroll does not work properly without this.
-					while (Gtk.Application.EventsPending())
+					if (Environment.OSVersion.Platform != PlatformID.Win32NT) // This throws a StackOverflowException on Windows.
 					{
-						Gtk.Application.RunIteration();
+						while (Gtk.Application.EventsPending())
+						{
+							Gtk.Application.RunIteration();
+						}
 					}
 					
 					uiLogOutput.ScrollToMark(logOutputEnd, 0.0, true, 0.5, 1.0);

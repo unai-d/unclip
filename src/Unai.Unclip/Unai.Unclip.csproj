@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
-		<OutputType>Exe</OutputType>
+		<OutputType>Library</OutputType>
 		<TargetFramework>net6.0</TargetFramework>
 	</PropertyGroup>
 
@@ -9,14 +9,6 @@
 		<PackageReference Include="System.Data.SQLite" Version="1.0.118" />
 		<PackageReference Include="System.Memory" Version="4.5.5" />
 		<PackageReference Include="SixLabors.ImageSharp" Version="2.1.3" />
-		<PackageReference Include="GtkSharp" Version="3.24.24.95" />
-	</ItemGroup>
-
-	<ItemGroup>
-		<None Remove="**\*.glade" />
-		<EmbeddedResource Include="**\*.glade">
-			<LogicalName>%(Filename)%(Extension)</LogicalName>
-		</EmbeddedResource>
 	</ItemGroup>
 
 </Project>
